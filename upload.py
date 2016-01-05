@@ -96,14 +96,15 @@ class DumpingReceiver(object):
 
 
 def parse_header_options(header):
-    parts = header.lower().split(';')
-    content_type, opts = parts[0], parts[1:]
-    options = {k.strip(): v.strip()
+    if not header:
+        return None, {}
+    parts = header.split(';')
+    content_type, opts = parts[0].lower(), parts[1:]
+    options = {k.strip(): v
         for k, sep, v in
         (option.partition('=') for option in opts)
     }
     return content_type, options
-
 
 @tornado.web.stream_request_body
 class MainHandler(tornado.web.RequestHandler):
@@ -116,6 +117,7 @@ class MainHandler(tornado.web.RequestHandler):
     def prepare(self):
         content_type_header = self.request.headers.get('content-type')
         content_type, opts = parse_header_options(content_type_header)
+        print 'xd', content_type, opts
         receiver_class = {
             'multipart/form-data': FormDataReceiver,
         }.get(content_type, DumpingReceiver)
@@ -123,12 +125,15 @@ class MainHandler(tornado.web.RequestHandler):
 
     def post(self):
         self.receiver.finish()
-        self.write("Hello, world")
+        self.render('index.html')
+
+    def get(self):
+        self.render('index.html')
 
 if __name__ == "__main__":
     parse_command_line()
     application = tornado.web.Application([
         (r"/", MainHandler),
-    ], debug=True)
+    ], debug=True, template_path='templates')
     application.listen(8080)
     tornado.ioloop.IOLoop.current().start()
