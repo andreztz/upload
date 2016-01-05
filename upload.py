@@ -1,47 +1,69 @@
-from cgi import FieldStorage
-import sys
+from multipart import MultipartParser
+import tornado.ioloop
+import tornado.web
 
-from twisted.internet.task import react
-from twisted.internet.defer import Deferred
+class FormDataReceiver(object):
+    def __init__(self, boundary, **kwargs):
+        print 'xd', repr(boundary)
+        self.parser = MultipartParser(boundary, {
+            'on_part_begin': self.on_part_begin,
+            'on_part_data': self.on_part_data,
+            'on_part_end': self.on_part_end,
+        })
 
-from twisted.internet.endpoints import serverFromString
-from twisted.web.resource import Resource
-from twisted.web.server import Site
+    def data_received(self, data):
+        self.parser.write(data)
+
+    def finish(self):
+        pass
+
+    def on_part_begin(self):
+        pass
+
+    def on_part_data(self, data, start, end):
+        print 'data', repr(data[start:end]), start, end
+
+    def on_part_end(self):
+        pass
 
 
-class UploadResource(Resource):
-    def getChild(self, path, request):
-        if not path:
-            return self
-        return Resource.getChild(path, request)
 
-    def render_GET(self, request):
-        return """
-        <!doctype html>
-        <html>
-        <head>
-            <title>upload</title>
-        </head>
-        <body>
-            <form action="" method="POST" enctype="multipart/form-data">
-                <input type="file" name="upfile" />
-                <input type="submit" />
-            </form>
-        </body>
-        </html>
-        """
+class DumpingReceiver(object):
+    pass
 
-    def render_POST(self, request):
-        print request.args
-        fs = FieldStorage(request.content)
-        print dict(fs)
-        return 'asd'
+def parse_content_type(header):
+    parts = header.lower().split(';')
+    content_type, opts = parts[0], parts[1:]
+    options = {k.strip(): v.strip()
+        for k, sep, v in
+        (option.partition('=') for option in opts)
+    }
+    return content_type, options
 
-def main(reactor):
-    ep = serverFromString(reactor, 'tcp:8080')
-    f = Site(UploadResource())
-    ep.listen(f)
-    return Deferred()
+@tornado.web.stream_request_body
+class MainHandler(tornado.web.RequestHandler):
+    def initialize(self):
+        print 'init'
 
-if __name__ == '__main__':
-    react(main)
+    def data_received(self, data):
+        self.receiver.data_received(data)
+
+    def prepare(self):
+        content_type_header = self.request.headers.get('content-type')
+        content_type, opts = parse_content_type(content_type_header)
+        receiver_class = {
+            'multipart/form-data': FormDataReceiver,
+        }.get(content_type, DumpingReceiver)
+        self.receiver = receiver_class(**opts)
+
+    def post(self):
+        self.receiver.finish()
+        print 'posting'
+        self.write("Hello, world")
+
+if __name__ == "__main__":
+    application = tornado.web.Application([
+        (r"/", MainHandler),
+    ])
+    application.listen(8080)
+    tornado.ioloop.IOLoop.current().start()
