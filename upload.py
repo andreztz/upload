@@ -1,9 +1,11 @@
 import os.path
+import uuid
 from StringIO import StringIO
 
 from multipart import MultipartParser
 import tornado.ioloop
 import tornado.web
+from tornado.web import url
 from tornado.options import parse_command_line
 
 
@@ -91,6 +93,7 @@ class FormDataReceiver(object):
     def on_headers_finished(self):
         pass
 
+
 class DumpingReceiver(object):
     pass
 
@@ -108,8 +111,8 @@ def parse_header_options(header):
 
 @tornado.web.stream_request_body
 class MainHandler(tornado.web.RequestHandler):
-    def initialize(self):
-        pass
+    def initialize(self, pending):
+        self._pending = pending
 
     def data_received(self, data):
         self.receiver.data_received(data)
@@ -117,7 +120,6 @@ class MainHandler(tornado.web.RequestHandler):
     def prepare(self):
         content_type_header = self.request.headers.get('content-type')
         content_type, opts = parse_header_options(content_type_header)
-        print 'xd', content_type, opts
         receiver_class = {
             'multipart/form-data': FormDataReceiver,
         }.get(content_type, DumpingReceiver)
@@ -125,15 +127,24 @@ class MainHandler(tornado.web.RequestHandler):
 
     def post(self):
         self.receiver.finish()
-        self.render('index.html')
+        self.get()
 
     def get(self):
-        self.render('index.html')
+        new_id = uuid.uuid4().hex
+        self.render('index.html', new_id=new_id)
+
+class Pending(object):
+    pass
+
+def make_app():
+    pending = Pending()
+    application = tornado.web.Application([
+        url(r"/", MainHandler, {'pending': pending}, name='upload'),
+    ], debug=True, template_path='templates')
+    return application
 
 if __name__ == "__main__":
     parse_command_line()
-    application = tornado.web.Application([
-        (r"/", MainHandler),
-    ], debug=True, template_path='templates')
+    application = make_app()
     application.listen(8080)
     tornado.ioloop.IOLoop.current().start()

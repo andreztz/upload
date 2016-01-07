@@ -4,7 +4,7 @@
     <title>Upload</title>
 </head>
 <body>
-    <form method="POST" action="/" enctype="multipart/form-data">
+    <form method="POST" action="{{ reverse_url('upload') }}?id={{ new_id }}" enctype="multipart/form-data">
         <input type="file" name="upload" />
         <input type="submit" />
     </form>
