@@ -2,7 +2,7 @@ argparse==1.2.1
 backports-abc==0.4
 backports.ssl-match-hostname==3.5.0.1
 certifi==2015.11.20.1
-python-multipart==0.0.2
+-e git://github.com/tumb1er/python-multipart.git#egg=python-multipart
 singledispatch==3.4.0.3
 six==1.10.0
 tornado==4.3

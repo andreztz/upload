@@ -5,7 +5,7 @@ from StringIO import StringIO
 from multipart import MultipartParser
 import tornado.ioloop
 import tornado.web
-from tornado.web import url
+from tornado.web import url, StaticFileHandler
 from tornado.options import parse_command_line
 
 
@@ -118,6 +118,7 @@ class MainHandler(tornado.web.RequestHandler):
         self.receiver.data_received(data)
 
     def prepare(self):
+        print 'headers', dict(self.request.headers)
         content_type_header = self.request.headers.get('content-type')
         content_type, opts = parse_header_options(content_type_header)
         receiver_class = {
@@ -140,11 +141,12 @@ def make_app():
     pending = Pending()
     application = tornado.web.Application([
         url(r"/", MainHandler, {'pending': pending}, name='upload'),
+        url(r'/static/(.*)', StaticFileHandler, {'path': 'static'})
     ], debug=True, template_path='templates')
     return application
 
 if __name__ == "__main__":
     parse_command_line()
     application = make_app()
-    application.listen(8080)
+    application.listen(8080, max_body_size=1024*1024*1024)
     tornado.ioloop.IOLoop.current().start()
