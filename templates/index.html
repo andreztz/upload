@@ -2,10 +2,12 @@
 <html>
 <head>
     <title>Upload</title>
+    <script type="text/javascript" src="/static/script.js"></script>
+
 </head>
 <body>
-    <form method="POST" action="{{ reverse_url('upload') }}?id={{ new_id }}" enctype="multipart/form-data">
-        <input type="file" name="upload" />
+    <form id="uploadForm" method="POST" action="{{ reverse_url('upload') }}?id={{ new_id }}" enctype="multipart/form-data">
+        <input type="file" name="upload" multiple />
         <input type="submit" />
     </form>
 </body>
