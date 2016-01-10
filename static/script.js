@@ -13,6 +13,6 @@ window.addEventListener('DOMContentLoaded', function(){
 
     var es = new EventSource('/pending?id=' + window.UPLOAD_ID);
     es.onmessage = function(evt){
-        console.log('message', JSON.parse(evt.data));
+        console.log('evt', evt);
     }
 });

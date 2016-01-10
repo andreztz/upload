@@ -142,11 +142,10 @@ class PendingHandler(tornado.web.RequestHandler):
     def get(self):
         upload_id = self.get_argument('id', uuid.uuid4().hex)
         listener = self._pending.get_listener(upload_id)
-        while True:
-            print listener._received_bytes
-            self.emit('ping')
-            yield sleep(1)
+        listener.register_callback(self._)
 
+    def _progress(self, received, total):
+        self.emit({'received': received, 'total': total}, event='progress')
 
 
 @tornado.web.stream_request_body
@@ -187,9 +186,20 @@ class ProgressListener(object):
         self.id = upload_id
         self.length = None
         self._received_bytes = 0
+        self._callbacks = set()
 
     def data_received(self, data):
         self._received_bytes += len(data)
+
+    def register_callback(self, cb):
+        self._callbacks.add(cb)
+
+    def unregister_callback(self, cb):
+        self._callbacks.remove(cb)
+
+    def _run_callbacks(self):
+        for cb in self._callbacks:
+            cb(self._received_bytes, self.length)
 
 
 class Pending(object):

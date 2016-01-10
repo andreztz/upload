@@ -9,9 +9,13 @@
 
 </head>
 <body>
-    <form id="uploadForm" method="POST" action="{{ reverse_url('upload') }}?id={{ new_id }}" enctype="multipart/form-data">
-        <input type="file" name="upload" multiple />
-        <input type="submit" />
-    </form>
+    <div id="upload">
+        <form id="uploadForm" method="POST" action="{{ reverse_url('upload') }}?id={{ new_id }}" enctype="multipart/form-data">
+            <input type="file" name="upload" multiple />
+            <input type="submit" />
+        </form>
+    </div>
+    <div id="progress">
+    </div>
 </body>
 </html>
