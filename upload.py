@@ -46,7 +46,9 @@ class ReceivedPart(object):
 
 
 class FormDataReceiver(object):
-    def __init__(self, boundary, **kwargs):
+    def __init__(self, listener, boundary, **kwargs):
+        self._listener = listener
+
         self.parser = MultipartParser(boundary, {
             'on_part_begin': self.on_part_begin,
             'on_part_data': self.on_part_data,
@@ -62,6 +64,7 @@ class FormDataReceiver(object):
         self._current_header_value = ''
 
     def data_received(self, data):
+        self._listener.data_received(data)
         self.parser.write(data)
 
     def finish(self):
@@ -93,9 +96,15 @@ class FormDataReceiver(object):
     def on_headers_finished(self):
         pass
 
+class NotifyingFormDataReceiver(FormDataReceiver):
+    def __init__(self, upload_id, *args, **kwargs):
+        self.id = upload_id
 
 class DumpingReceiver(object):
-    pass
+    def __init__(self, listener):
+        self._listener = listener
+        self.length = None
+        self._received_bytes = 0
 
 
 def parse_header_options(header):
@@ -108,6 +117,37 @@ def parse_header_options(header):
         (option.partition('=') for option in opts)
     }
     return content_type, options
+
+from tornado.gen import coroutine, sleep
+import json
+class PendingHandler(tornado.web.RequestHandler):
+    def initialize(self, pending):
+        self._pending = pending
+
+    def prepare(self):
+        self.set_header('Content-Type', 'text/event-stream')
+        self.set_header('Cache-Control', 'no-cache')
+
+    def emit(self, data, event=None):
+        response = u''
+        if event is not None:
+            response += u'event: ' + unicode(event).strip() + u'\n'
+
+        response += u'data: ' + json.dumps(data).strip() + u'\n\n'
+
+        self.write(response)
+        self.flush()
+
+    @coroutine
+    def get(self):
+        upload_id = self.get_argument('id', uuid.uuid4().hex)
+        listener = self._pending.get_listener(upload_id)
+        while True:
+            print listener._received_bytes
+            self.emit('ping')
+            yield sleep(1)
+
+
 
 @tornado.web.stream_request_body
 class MainHandler(tornado.web.RequestHandler):
@@ -124,7 +164,14 @@ class MainHandler(tornado.web.RequestHandler):
         receiver_class = {
             'multipart/form-data': FormDataReceiver,
         }.get(content_type, DumpingReceiver)
-        self.receiver = receiver_class(**opts)
+
+        upload_id = self.get_argument('id', uuid.uuid4().hex)
+        try:
+            length = int(self.request.headers['content-length'])
+        except (ValueError, KeyError):
+            pass
+        listener = self._pending.get_listener(upload_id)
+        self.receiver = receiver_class(listener, **opts)
 
     def post(self):
         self.receiver.finish()
@@ -134,16 +181,34 @@ class MainHandler(tornado.web.RequestHandler):
         new_id = uuid.uuid4().hex
         self.render('index.html', new_id=new_id)
 
+
+class ProgressListener(object):
+    def __init__(self, upload_id):
+        self.id = upload_id
+        self.length = None
+        self._received_bytes = 0
+
+    def data_received(self, data):
+        self._received_bytes += len(data)
+
+
 class Pending(object):
-    pass
+    def __init__(self):
+        self._listeners = {}
+
+    def get_listener(self, upload_id):
+        return self._listeners.setdefault(upload_id, ProgressListener(upload_id))
+
 
 def make_app():
     pending = Pending()
     application = tornado.web.Application([
         url(r"/", MainHandler, {'pending': pending}, name='upload'),
-        url(r'/static/(.*)', StaticFileHandler, {'path': 'static'})
+        url(r'/static/(.*)', StaticFileHandler, {'path': 'static'}),
+        url(r'/pending', PendingHandler, {'pending': pending})
     ], debug=True, template_path='templates')
     return application
+
 
 if __name__ == "__main__":
     parse_command_line()

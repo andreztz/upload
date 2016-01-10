@@ -10,4 +10,9 @@ window.addEventListener('DOMContentLoaded', function(){
         req.send(new FormData(uploadForm));
         return false;
     });
+
+    var es = new EventSource('/pending?id=' + window.UPLOAD_ID);
+    es.onmessage = function(evt){
+        console.log('message', JSON.parse(evt.data));
+    }
 });
