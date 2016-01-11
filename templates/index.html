@@ -6,7 +6,11 @@
         window.UPLOAD_ID = '{{ new_id }}';
     </script>
     <script type="text/javascript" src="/static/script.js"></script>
-
+    <style>
+        li span {
+            margin: 20px;
+        }
+    </style>
 </head>
 <body>
     <div id="upload">
@@ -15,7 +19,6 @@
             <input type="submit" />
         </form>
     </div>
-    <div id="progress">
-    </div>
+    <ul id="filesToUpload"></ul>
 </body>
 </html>
