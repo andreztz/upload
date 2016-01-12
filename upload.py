@@ -45,17 +45,85 @@ class ReceivedPart(object):
         self.sink.close()
 
 
+
+class ReceivedPart(object):
+    def __init__(self):
+        self._sink = self.get_sink()
+
+    def get_sink(self):
+        raise NotImplementedError()
+
+    def data_received(self, data):
+        self._sink.write(data)
+
+    def finish(self):
+        self._sink.close()
+
+
+class ReceivedFile(ReceivedPart):
+    def __init__(self, filename):
+        self._filename = filename
+        self._sink = open(filename, 'w')
+
+    def data_received(self, data):
+        self._sink.write(data)
+
+    def finish(self):
+        self._sink.close()
+
+
+class ReceivedField(ReceivedPart):
+    def get_sink(self):
+        return StringIO()
+
+
+class DescriptionField(ReceivedField):
+    def get_data(self):
+        return json.loads(self._sink.getvalue())
+
+from collections import Mapping
+class HeadersGatherer(Mapping):
+    def __init__(self):
+        self._current_header = ''
+        self._current_header_value = ''
+        self.headers = {}
+
+    def on_header_field(self, data, start, end):
+        self._current_header += data[start:end]
+
+    def on_header_value(self, data, start, end):
+        self._current_header_value += data[start:end]
+
+    def on_header_end(self):
+        header = self._current_header.lower()
+        value = self._current_header_value
+        self.headers[header] = value
+        self._current_header = ''
+        self._current_header_value = ''
+
+    def __getitem__(self, k):
+        return self.headers[k]
+
+    def __len__(self):
+        return len(self.headers)
+
+    def __iter__(self):
+        return iter(self.headers)
+
+    def clear(self):
+        self.headers = {}
+
 class FormDataReceiver(object):
     def __init__(self, listener, boundary, **kwargs):
         self._listener = listener
-
+        self.headers = HeadersGatherer()
         self.parser = MultipartParser(boundary, {
             'on_part_begin': self.on_part_begin,
             'on_part_data': self.on_part_data,
             'on_part_end': self.on_part_end,
-            'on_header_field': self.on_header_field,
-            'on_header_value': self.on_header_value,
-            'on_header_end': self.on_header_end,
+            'on_header_field': self.headers.on_header_field,
+            'on_header_value': self.headers.on_header_value,
+            'on_header_end': self.headers.on_header_end,
             'on_headers_finished': self.on_headers_finished
         })
         self._parts_received = []
@@ -71,30 +139,28 @@ class FormDataReceiver(object):
         pass
 
     def on_part_begin(self):
-        self._current = ReceivedPart()
-        self._parts_received.append(self._current)
+        self.headers.clear()
 
     def on_part_data(self, data, start, end):
-        self._current.data_received(data[start:end])
+        if self._current is not None:
+            self._current.data_received(data[start:end])
 
     def on_part_end(self):
         self._current.finish()
-
-    def on_header_field(self, data, start, end):
-        self._current_header += data[start:end]
-
-    def on_header_value(self, data, start, end):
-        self._current_header_value += data[start:end]
-
-    def on_header_end(self):
-        header = self._current_header.lower()
-        value = self._current_header_value
-        self._current.headers[header] = value
-        self._current_header = ''
-        self._current_header_value = ''
+        self._current = None
 
     def on_headers_finished(self):
-        pass
+        disposition_header = self.headers['content-disposition']
+        disposition, options = parse_header_options(disposition_header)
+        if disposition == 'form-data':
+            input_name = options.pop('name')
+            field_class = {
+                'upload': ReceivedFile,
+                'filesize': DescriptionField
+            }.get(input_name)
+            self._current = field_class(**options)
+            self._parts_received.append(self._current)
+
 
 class NotifyingFormDataReceiver(FormDataReceiver):
     def __init__(self, upload_id, *args, **kwargs):
@@ -112,40 +178,29 @@ def parse_header_options(header):
         return None, {}
     parts = header.split(';')
     content_type, opts = parts[0].lower(), parts[1:]
-    options = {k.strip(): v
+    options = {k.strip(): v.strip('"')
         for k, sep, v in
         (option.partition('=') for option in opts)
     }
     return content_type, options
 
-from tornado.gen import coroutine, sleep
+from tornado.gen import coroutine, sleep, Future
+from tornado.web import asynchronous
 import json
-class PendingHandler(tornado.web.RequestHandler):
+from tornado.websocket import WebSocketHandler
+
+
+class PendingHandler(WebSocketHandler):
     def initialize(self, pending):
         self._pending = pending
 
-    def prepare(self):
-        self.set_header('Content-Type', 'text/event-stream')
-        self.set_header('Cache-Control', 'no-cache')
-
-    def emit(self, data, event=None):
-        response = u''
-        if event is not None:
-            response += u'event: ' + unicode(event).strip() + u'\n'
-
-        response += u'data: ' + json.dumps(data).strip() + u'\n\n'
-
-        self.write(response)
-        self.flush()
-
-    @coroutine
-    def get(self):
+    def open(self):
         upload_id = self.get_argument('id', uuid.uuid4().hex)
         listener = self._pending.get_listener(upload_id)
-        listener.register_callback(self._)
+        listener.register_callback(self._progress)
 
     def _progress(self, received, total):
-        self.emit({'received': received, 'total': total}, event='progress')
+        self.write_message(json.dumps({'received': received, 'total': total}))
 
 
 @tornado.web.stream_request_body
@@ -190,6 +245,7 @@ class ProgressListener(object):
 
     def data_received(self, data):
         self._received_bytes += len(data)
+        self._run_callbacks()
 
     def register_callback(self, cb):
         self._callbacks.add(cb)
