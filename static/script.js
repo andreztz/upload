@@ -35,22 +35,22 @@ function makeFileDisplayElement(file){
     return elem;
 }
 
-function makeFilesizesInput(files){
-    var filesDesc = [];
-    var file;
-    for (var i = 0; i < files.length; i++){
-        file = files[i];
-        filesDesc.push({
-            filename: file.name,
-            size: file.size
-        });
-    }
-
+function makeFilesizesInput(){
     var input = document.createElement('input');
     input.setAttribute('type', 'hidden');
     input.setAttribute('name', 'filesize');
-    input.setAttribute('value', JSON.stringify(filesDesc));
     return input;
+}
+
+function makeFilesDesc(files){
+    var filesDesc = {};
+    var file;
+    for (var i = 0; i < files.length; i++){
+        file = files[i];
+        filesDesc[file.name] = file.size;
+    }
+
+    return JSON.stringify(filesDesc);
 }
 
 window.addEventListener('DOMContentLoaded', function(){
@@ -60,6 +60,7 @@ window.addEventListener('DOMContentLoaded', function(){
 
 
     var filesInput = uploadForm.upload;
+    var filesizesInput = null;
 
     filesInput.addEventListener('change', function(evt){
         while (display.firstChild){
@@ -77,9 +78,11 @@ window.addEventListener('DOMContentLoaded', function(){
         evt.preventDefault();
         var req = new XMLHttpRequest();
 
-        uploadForm.insertBefore(makeFilesizesInput(filesInput.files),
-            uploadForm.firstChild);
-
+        if (filesizesInput === null){
+            filesizesInput = makeFilesizesInput();
+            uploadForm.insertBefore(filesizesInput, uploadForm.firstChild);
+        }
+        filesizesInput.setAttribute('value', makeFilesDesc(filesInput.files));
         req.open('post', uploadForm.action, true);
         req.send(new FormData(uploadForm));
         return false;

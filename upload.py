@@ -76,6 +76,8 @@ class ReceivedField(ReceivedPart):
     def get_sink(self):
         return StringIO()
 
+    def finish(self):
+        pass
 
 class DescriptionField(ReceivedField):
     def get_data(self):
@@ -126,13 +128,11 @@ class FormDataReceiver(object):
             'on_header_end': self.headers.on_header_end,
             'on_headers_finished': self.on_headers_finished
         })
-        self._parts_received = []
+        self._parts_received = {}
         self._current = None
-        self._current_header = ''
-        self._current_header_value = ''
+        self._current_name = None
 
     def data_received(self, data):
-        self._listener.data_received(data)
         self.parser.write(data)
 
     def finish(self):
@@ -144,6 +144,13 @@ class FormDataReceiver(object):
     def on_part_data(self, data, start, end):
         if self._current is not None:
             self._current.data_received(data[start:end])
+
+        total = None
+        if self._current_name == 'upload' and 'filesize' in self._parts_received:
+            desc = self._parts_received['filesize'].get_data()
+            filename = self._current._filename
+            total = desc[filename]
+            self._listener.file_part_received(filename, len(data), total)
 
     def on_part_end(self):
         self._current.finish()
@@ -159,7 +166,8 @@ class FormDataReceiver(object):
                 'filesize': DescriptionField
             }.get(input_name)
             self._current = field_class(**options)
-            self._parts_received.append(self._current)
+            self._current_name = input_name
+            self._parts_received[input_name] = self._current
 
 
 class NotifyingFormDataReceiver(FormDataReceiver):
@@ -212,7 +220,6 @@ class MainHandler(tornado.web.RequestHandler):
         self.receiver.data_received(data)
 
     def prepare(self):
-        print 'headers', dict(self.request.headers)
         content_type_header = self.request.headers.get('content-type')
         content_type, opts = parse_header_options(content_type_header)
         receiver_class = {
@@ -242,9 +249,17 @@ class ProgressListener(object):
         self.length = None
         self._received_bytes = 0
         self._callbacks = set()
+        self._files = {}
 
-    def data_received(self, data):
-        self._received_bytes += len(data)
+    def data_received(self, count):
+        self._received_bytes += count
+        self._run_callbacks()
+
+    def file_part_received(self, filename, count, total):
+        if filename not in self._files:
+            self._files[filename] = [count, total]
+        else:
+            self._files[filename][0] += count
         self._run_callbacks()
 
     def register_callback(self, cb):
@@ -253,9 +268,15 @@ class ProgressListener(object):
     def unregister_callback(self, cb):
         self._callbacks.remove(cb)
 
+    def get_current_data(self):
+        return {
+            'total': [self._received_bytes, self.length],
+            'files': self._files
+        }
     def _run_callbacks(self):
+        data = self.get_current_data()
         for cb in self._callbacks:
-            cb(self._received_bytes, self.length)
+            cb(data, self.length)
 
 
 class Pending(object):
