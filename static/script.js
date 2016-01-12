@@ -35,6 +35,24 @@ function makeFileDisplayElement(file){
     return elem;
 }
 
+function makeFilesizesInput(files){
+    var filesDesc = [];
+    var file;
+    for (var i = 0; i < files.length; i++){
+        file = files[i];
+        filesDesc.push({
+            filename: file.name,
+            size: file.size
+        });
+    }
+
+    var input = document.createElement('input');
+    input.setAttribute('type', 'hidden');
+    input.setAttribute('name', 'filesize');
+    input.setAttribute('value', JSON.stringify(filesDesc));
+    return input;
+}
+
 window.addEventListener('DOMContentLoaded', function(){
     var uploadForm = document.getElementById('uploadForm');
     var display = document.getElementById('filesToUpload')
@@ -58,9 +76,10 @@ window.addEventListener('DOMContentLoaded', function(){
     uploadForm.addEventListener('submit', function(evt){
         evt.preventDefault();
         var req = new XMLHttpRequest();
-        req.addEventListener("progress", function(){
-            console.log('progress', arguments);
-        }, false);
+
+        uploadForm.insertBefore(makeFilesizesInput(filesInput.files),
+            uploadForm.firstChild);
+
         req.open('post', uploadForm.action, true);
         req.send(new FormData(uploadForm));
         return false;
