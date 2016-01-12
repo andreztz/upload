@@ -136,7 +136,7 @@ class FormDataReceiver(object):
         self.parser.write(data)
 
     def finish(self):
-        pass
+        self._listener.finish()
 
     def on_part_begin(self):
         self.headers.clear()
@@ -150,7 +150,7 @@ class FormDataReceiver(object):
             desc = self._parts_received['filesize'].get_data()
             filename = self._current._filename
             total = desc[filename]
-            self._listener.file_part_received(filename, len(data), total)
+            self._listener.file_part_received(filename, end-start, total)
 
     def on_part_end(self):
         self._current.finish()
@@ -207,8 +207,8 @@ class PendingHandler(WebSocketHandler):
         listener = self._pending.get_listener(upload_id)
         listener.register_callback(self._progress)
 
-    def _progress(self, received, total):
-        self.write_message(json.dumps({'received': received, 'total': total}))
+    def _progress(self, data):
+        self.write_message(json.dumps(data))
 
 
 @tornado.web.stream_request_body
@@ -273,10 +273,14 @@ class ProgressListener(object):
             'total': [self._received_bytes, self.length],
             'files': self._files
         }
+
     def _run_callbacks(self):
         data = self.get_current_data()
         for cb in self._callbacks:
-            cb(data, self.length)
+            cb(data)
+
+    def finish(self):
+        self._files = {}
 
 
 class Pending(object):

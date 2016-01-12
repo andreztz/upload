@@ -32,6 +32,10 @@ function makeFileDisplayElement(file){
     sizeSpan.classList.add('filesize');
     sizeSpan.textContent = humanReadableFilesize(file.size);
     elem.appendChild(sizeSpan);
+
+    var progressSpan = document.createElement('span');
+    progressSpan.classList.add('progress');
+    elem.appendChild(progressSpan);
     return elem;
 }
 
@@ -62,17 +66,25 @@ window.addEventListener('DOMContentLoaded', function(){
     var filesInput = uploadForm.upload;
     var filesizesInput = null;
 
+    var filesDisplay = {};
     filesInput.addEventListener('change', function(evt){
         while (display.firstChild){
             display.removeChild(display.firstChild);
+        }
+        for (var key in filesDisplay){
+            if (filesDisplay.hasOwnProperty(key)){
+                delete filesDisplay[key];
+            }
         }
         var file, displayElement;
         for (var i = 0; i < filesInput.files.length; i++){
             file = filesInput.files[i];
             displayElement = makeFileDisplayElement(file);
             display.appendChild(displayElement);
+            filesDisplay[file.name] = displayElement;
         }
     });
+
 
     uploadForm.addEventListener('submit', function(evt){
         evt.preventDefault();
@@ -92,6 +104,19 @@ window.addEventListener('DOMContentLoaded', function(){
     var ws = new WebSocket(getWebSocketURL());
 
     ws.onmessage = function(evt){
-        console.log('evt', evt);
+        var data = JSON.parse(evt.data);
+        Object.keys(data.files).forEach(function(filename){
+            var desc = data.files[filename];
+            var display = filesDisplay[filename];
+            var received = desc[0],
+                total = desc[1];
+
+            var progressDisplay = display.getElementsByClassName('progress')[0];
+            if (received === total){
+                progressDisplay.textContent = 'Finished';
+            } else {
+                progressDisplay.textContent = '' + Math.round((received/total) *100) + '%';
+            }
+        });
     }
 });
