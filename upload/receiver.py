@@ -8,6 +8,14 @@ import tornado.web
 from tornado.web import url, StaticFileHandler
 from tornado.options import parse_command_line
 
+from tornado.gen import coroutine, sleep, Future
+from tornado.web import asynchronous
+import json
+from tornado.websocket import WebSocketHandler
+from multipart import multipart
+
+from upload.util import parse_header_options
+
 
 class ReceivedPart(object):
     def __init__(self):
@@ -84,6 +92,7 @@ class DescriptionField(ReceivedField):
         return json.loads(self._sink.getvalue())
 
 from collections import Mapping
+
 class HeadersGatherer(Mapping):
     def __init__(self):
         self._current_header = ''
@@ -179,130 +188,3 @@ class DumpingReceiver(object):
         self._listener = listener
         self.length = None
         self._received_bytes = 0
-
-
-def parse_header_options(header):
-    if not header:
-        return None, {}
-    parts = header.split(';')
-    content_type, opts = parts[0].lower(), parts[1:]
-    options = {k.strip(): v.strip('"')
-        for k, sep, v in
-        (option.partition('=') for option in opts)
-    }
-    return content_type, options
-
-from tornado.gen import coroutine, sleep, Future
-from tornado.web import asynchronous
-import json
-from tornado.websocket import WebSocketHandler
-
-
-class PendingHandler(WebSocketHandler):
-    def initialize(self, pending):
-        self._pending = pending
-
-    def open(self):
-        upload_id = self.get_argument('id', uuid.uuid4().hex)
-        listener = self._pending.get_listener(upload_id)
-        listener.register_callback(self._progress)
-
-    def _progress(self, data):
-        self.write_message(json.dumps(data))
-
-
-@tornado.web.stream_request_body
-class MainHandler(tornado.web.RequestHandler):
-    def initialize(self, pending):
-        self._pending = pending
-
-    def data_received(self, data):
-        self.receiver.data_received(data)
-
-    def prepare(self):
-        content_type_header = self.request.headers.get('content-type')
-        content_type, opts = parse_header_options(content_type_header)
-        receiver_class = {
-            'multipart/form-data': FormDataReceiver,
-        }.get(content_type, DumpingReceiver)
-
-        upload_id = self.get_argument('id', uuid.uuid4().hex)
-        try:
-            length = int(self.request.headers['content-length'])
-        except (ValueError, KeyError):
-            pass
-        listener = self._pending.get_listener(upload_id)
-        self.receiver = receiver_class(listener, **opts)
-
-    def post(self):
-        self.receiver.finish()
-        self.get()
-
-    def get(self):
-        new_id = uuid.uuid4().hex
-        self.render('index.html', new_id=new_id)
-
-
-class ProgressListener(object):
-    def __init__(self, upload_id):
-        self.id = upload_id
-        self.length = None
-        self._received_bytes = 0
-        self._callbacks = set()
-        self._files = {}
-
-    def data_received(self, count):
-        self._received_bytes += count
-        self._run_callbacks()
-
-    def file_part_received(self, filename, count, total):
-        if filename not in self._files:
-            self._files[filename] = [count, total]
-        else:
-            self._files[filename][0] += count
-        self._run_callbacks()
-
-    def register_callback(self, cb):
-        self._callbacks.add(cb)
-
-    def unregister_callback(self, cb):
-        self._callbacks.remove(cb)
-
-    def get_current_data(self):
-        return {
-            'total': [self._received_bytes, self.length],
-            'files': self._files
-        }
-
-    def _run_callbacks(self):
-        data = self.get_current_data()
-        for cb in self._callbacks:
-            cb(data)
-
-    def finish(self):
-        self._files = {}
-
-
-class Pending(object):
-    def __init__(self):
-        self._listeners = {}
-
-    def get_listener(self, upload_id):
-        return self._listeners.setdefault(upload_id, ProgressListener(upload_id))
-
-
-def make_app():
-    pending = Pending()
-    application = tornado.web.Application([
-        url(r"/", MainHandler, {'pending': pending}, name='upload'),
-        url(r'/static/(.*)', StaticFileHandler, {'path': 'static'}),
-        url(r'/pending', PendingHandler, {'pending': pending})
-    ], debug=True, template_path='templates')
-    return application
-
-
-if __name__ == "__main__":
-    parse_command_line()
-    application = make_app()
-    application.listen(8080, max_body_size=1024*1024*1024)
-    tornado.ioloop.IOLoop.current().start()
