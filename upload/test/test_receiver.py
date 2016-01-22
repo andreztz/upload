@@ -1,9 +1,7 @@
 import pytest
-from tornado.testing import AsyncHTTPTestCase
-from tornado.web import Application, url
-from mock import patch, mock_open
+from mock import patch
 
-from upload.receiver import HeadersGatherer, _choose_input, ReceivedFile, DescriptionField
+from upload.receiver import HeadersGatherer, _choose_input, ReceivedFile
 
 
 def test_receive_headers():
@@ -45,10 +43,10 @@ def test_received_file_name_conflict():
     tried_filenames = [args[0] for name, args, kwargs in m.mock_calls]
     assert any(filename not in preexisting for filename in tried_filenames)
 
+
 def test_received_file_no_conflict():
     with patch('upload.receiver.open') as m:
         received = ReceivedFile('notused.txt')
 
     assert len(m.mock_calls) == 1
     assert m.call_args[0][0] == 'notused.txt'
-
