@@ -1,3 +1,4 @@
+from collections import Mapping
 import os.path
 import uuid
 from StringIO import StringIO
@@ -87,11 +88,11 @@ class ReceivedField(ReceivedPart):
     def finish(self):
         pass
 
+
 class DescriptionField(ReceivedField):
     def get_data(self):
         return json.loads(self._sink.getvalue())
 
-from collections import Mapping
 
 class HeadersGatherer(Mapping):
     def __init__(self):
@@ -123,6 +124,7 @@ class HeadersGatherer(Mapping):
 
     def clear(self):
         self.headers = {}
+
 
 class FormDataReceiver(object):
     def __init__(self, listener, boundary, **kwargs):
@@ -174,6 +176,8 @@ class FormDataReceiver(object):
                 'upload': ReceivedFile,
                 'filesize': DescriptionField
             }.get(input_name)
+            if field_class is None and 'filename' in options:
+                field_class = ReceivedFile
             self._current = field_class(**options)
             self._current_name = input_name
             self._parts_received[input_name] = self._current
