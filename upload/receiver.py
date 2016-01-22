@@ -20,43 +20,6 @@ from upload.util import parse_header_options
 
 class ReceivedPart(object):
     def __init__(self):
-        self.headers = {}
-        self._sink = None
-
-    @property
-    def filename(self):
-        disposition_header = self.headers.get('content-disposition')
-        content_disposition, opts = parse_header_options(disposition_header)
-        try:
-            filename = opts['filename']
-        except KeyError:
-            return None
-        else:
-            return filename.strip('"\'')
-
-    @property
-    def is_file(self):
-        return self.filename is not None
-
-    @property
-    def sink(self):
-        if self._sink is None:
-            if self.is_file:
-                self._sink = open(os.path.join('uploaded', self.filename), 'w')
-            else:
-                self._sink = StringIO()
-        return self._sink
-
-    def data_received(self, data):
-        self.sink.write(data)
-
-    def finish(self):
-        self.sink.close()
-
-
-
-class ReceivedPart(object):
-    def __init__(self):
         self._sink = self.get_sink()
 
     def get_sink(self):
@@ -72,7 +35,15 @@ class ReceivedPart(object):
 class ReceivedFile(ReceivedPart):
     def __init__(self, filename):
         self._filename = filename
-        self._sink = open(filename, 'w')
+        self._original_filename = filename
+        super(ReceivedFile, self).__init__()
+
+    def get_sink(self):
+        while True:
+            try:
+                return open(self._filename, 'wx')
+            except OSError as e:
+                self._filename = '%s.%s' % (self._original_filename, uuid.uuid4().hex)
 
     def data_received(self, data):
         self._sink.write(data)
@@ -109,12 +80,12 @@ class HeadersGatherer(Mapping):
     def on_header_end(self):
         header = self._current_header.lower()
         value = self._current_header_value
-        self.headers[header] = value
+        self.headers[header.lower()] = value
         self._current_header = ''
         self._current_header_value = ''
 
     def __getitem__(self, k):
-        return self.headers[k]
+        return self.headers[k.lower()]
 
     def __len__(self):
         return len(self.headers)
@@ -124,6 +95,17 @@ class HeadersGatherer(Mapping):
 
     def clear(self):
         self.headers = {}
+
+
+def _choose_input(disposition, options):
+    input_name = options.pop('name', None)
+    field_class = {
+        'upload': ReceivedFile,
+        'filesize': DescriptionField
+    }.get(input_name)
+    if field_class is None and 'filename' in options:
+        field_class = ReceivedFile
+    return (input_name, field_class)
 
 
 class FormDataReceiver(object):
@@ -164,20 +146,15 @@ class FormDataReceiver(object):
             self._listener.file_part_received(filename, end-start, total)
 
     def on_part_end(self):
-        self._current.finish()
-        self._current = None
+        if self._current is not None:
+            self._current.finish()
+            self._current = None
 
     def on_headers_finished(self):
         disposition_header = self.headers['content-disposition']
         disposition, options = parse_header_options(disposition_header)
         if disposition == 'form-data':
-            input_name = options.pop('name')
-            field_class = {
-                'upload': ReceivedFile,
-                'filesize': DescriptionField
-            }.get(input_name)
-            if field_class is None and 'filename' in options:
-                field_class = ReceivedFile
+            input_name, field_class = _choose_input(disposition, options)
             self._current = field_class(**options)
             self._current_name = input_name
             self._parts_received[input_name] = self._current
@@ -187,8 +164,15 @@ class NotifyingFormDataReceiver(FormDataReceiver):
     def __init__(self, upload_id, *args, **kwargs):
         self.id = upload_id
 
+
 class DumpingReceiver(object):
     def __init__(self, listener):
         self._listener = listener
         self.length = None
         self._received_bytes = 0
+
+    def data_received(self, data):
+        pass
+
+    def finish(self):
+        pass

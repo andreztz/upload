@@ -65,6 +65,3 @@ class TestUploadHandler(AsyncHTTPTestCase):
 
         written_data = ''.join(args[0] for _, args, _ in m().write.mock_calls)
         assert written_data == '1\n2\n\n'
-
-
-

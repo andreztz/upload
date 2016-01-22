@@ -74,5 +74,3 @@ class PendingHandler(WebSocketHandler):
 
     def _progress(self, data):
         self.write_message(json.dumps(data))
-
-
