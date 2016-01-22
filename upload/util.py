@@ -1,6 +1,4 @@
 
-
-
 def parse_header_options(header):
     if not header:
         return None, {}

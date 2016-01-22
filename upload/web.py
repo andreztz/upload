@@ -1,18 +1,7 @@
-import os.path
 import uuid
 from StringIO import StringIO
 
-from multipart import MultipartParser
-import tornado.ioloop
 import tornado.web
-from tornado.web import url, StaticFileHandler
-from tornado.options import parse_command_line
-
-from tornado.gen import coroutine, sleep, Future
-from tornado.web import asynchronous
-import json
-from tornado.websocket import WebSocketHandler
-
 
 from upload.receiver import FormDataReceiver, DumpingReceiver
 from upload.util import parse_header_options
@@ -29,7 +18,6 @@ class MainHandler(tornado.web.RequestHandler):
     def prepare(self):
         content_type_header = self.request.headers.get('content-type')
         content_type, opts = parse_header_options(content_type_header)
-        print 'xd', content_type
         receiver_class = {
             'multipart/form-data': FormDataReceiver,
         }.get(content_type, DumpingReceiver)

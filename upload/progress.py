@@ -1,18 +1,7 @@
-import os.path
-import uuid
-from StringIO import StringIO
-
-from multipart import MultipartParser
-import tornado.ioloop
-import tornado.web
-from tornado.web import url, StaticFileHandler
-from tornado.options import parse_command_line
-
-from tornado.gen import coroutine, sleep, Future
-from tornado.web import asynchronous
 import json
-from tornado.websocket import WebSocketHandler
+import uuid
 
+from tornado.websocket import WebSocketHandler
 
 
 class ProgressListener(object):

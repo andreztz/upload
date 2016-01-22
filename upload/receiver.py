@@ -1,19 +1,9 @@
 from collections import Mapping
-import os.path
+import json
 import uuid
 from StringIO import StringIO
 
 from multipart import MultipartParser
-import tornado.ioloop
-import tornado.web
-from tornado.web import url, StaticFileHandler
-from tornado.options import parse_command_line
-
-from tornado.gen import coroutine, sleep, Future
-from tornado.web import asynchronous
-import json
-from tornado.websocket import WebSocketHandler
-from multipart import multipart
 
 from upload.util import parse_header_options
 
