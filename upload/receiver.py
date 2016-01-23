@@ -210,7 +210,7 @@ class FormDataReceiver(object):
         disposition, options = parse_header_options(disposition_header)
         if disposition == 'form-data':
             self._current_name, self._current = _choose_input(disposition, options)
-            self._parts_received[input_name] = self._current
+            self._parts_received[self._current_name] = self._current
 
 
 class DumpingReceiver(object):
