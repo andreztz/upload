@@ -1,5 +1,4 @@
 import uuid
-from StringIO import StringIO
 
 import tornado.web
 
