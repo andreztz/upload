@@ -1,7 +1,7 @@
 from collections import Mapping
 import json
 import uuid
-from StringIO import StringIO
+from six import StringIO
 
 from multipart import MultipartParser
 
@@ -56,11 +56,20 @@ class DescriptionField(ReceivedField):
 
 
 class HeadersGatherer(Mapping):
+    """Gather incoming header data into a mapping.
+
+    This exposes 3 methods that are to be used as python-multipart's callbacks:
+    on_header_field, on_header_value, on_header_end.
+
+    At any point use this as a mapping to access received headers.
+    """
     def __init__(self):
-        self._current_header = ''
-        self._current_header_value = ''
+        self._current_header = b''
+        self._current_header_value = b''
         self.headers = {}
 
+    # the start/end parameters are as expected by python-multipart;
+    # these methods need to slice the data themselves
     def on_header_field(self, data, start, end):
         self._current_header += data[start:end]
 
@@ -68,11 +77,11 @@ class HeadersGatherer(Mapping):
         self._current_header_value += data[start:end]
 
     def on_header_end(self):
-        header = self._current_header.lower()
-        value = self._current_header_value
-        self.headers[header.lower()] = value
-        self._current_header = ''
-        self._current_header_value = ''
+        header = self._current_header.decode('latin-1').lower()
+        value = self._current_header_value.decode('latin-1')
+        self.headers[header] = value
+        self._current_header = b''
+        self._current_header_value = b''
 
     def __getitem__(self, k):
         return self.headers[k.lower()]
@@ -88,6 +97,19 @@ class HeadersGatherer(Mapping):
 
 
 def _choose_input(disposition, options):
+    """Examine the content-disposition and value, and choose the fieldname, and
+    field class to parse the incoming data.
+
+    Args:
+        disposition (str): content-disposition as retrieved from the header
+        options (dict):
+
+    Returns:
+        (tuple): tuple containing
+            input_name (str): name of the field we're processing
+            receiver : pass the incoming data into this for storage
+
+    """
     input_name = options.pop('name', None)
     field_class = {
         'upload': ReceivedFile,
@@ -95,10 +117,21 @@ def _choose_input(disposition, options):
     }.get(input_name)
     if field_class is None and 'filename' in options:
         field_class = ReceivedFile
-    return (input_name, field_class)
+    return (input_name, field_class(**options))
 
 
 class FormDataReceiver(object):
+    """Handle incoming multipart/form-data, and route it to storage classes.
+
+    This is the main data receiver, to be used from within a RequestHandler.
+    Keep pushing incoming multipart data into its data_received method, and
+    remember to call finish() when done.
+
+    Args:
+        listener (ProgressListener): the listener to be notified
+            of upload progress
+        boundary (str): multipart mimetype boundary
+    """
     def __init__(self, listener, boundary, **kwargs):
         self._listener = listener
         self.headers = HeadersGatherer()
@@ -144,18 +177,16 @@ class FormDataReceiver(object):
         disposition_header = self.headers['content-disposition']
         disposition, options = parse_header_options(disposition_header)
         if disposition == 'form-data':
-            input_name, field_class = _choose_input(disposition, options)
-            self._current = field_class(**options)
-            self._current_name = input_name
+            self._current_name, self._current = _choose_input(disposition, options)
             self._parts_received[input_name] = self._current
 
 
-class NotifyingFormDataReceiver(FormDataReceiver):
-    def __init__(self, upload_id, *args, **kwargs):
-        self.id = upload_id
-
-
 class DumpingReceiver(object):
+    """A receiver for data other than multipart/form-data.
+
+    Probably will be useful in the future for `$ curl -X POST -d @file` uploads
+    """
+    # XXX make this actually store the data, and update the listener
     def __init__(self, listener):
         self._listener = listener
         self.length = None
