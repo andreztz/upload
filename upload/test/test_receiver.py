@@ -1,7 +1,7 @@
 import pytest
 from mock import patch
 
-from upload.receiver import HeadersGatherer, _choose_input, ReceivedFile
+from upload.receiver import HeadersGatherer, _choose_input, ReceivedFile, ReceivedField, DescriptionField
 
 
 def test_receive_headers():
@@ -18,13 +18,19 @@ def test_receive_headers():
 
 
 @pytest.mark.parametrize('disposition,options,expected', [
-    ('form-data', {'filename': 'foo'}, (None, ReceivedFile))
+    ('form-data', {'filename': 'foo'}, (None, ReceivedFile)),
+    ('form-data', {'filename': 'foo', 'name': 'bar.txt'}, ('bar.txt', ReceivedFile)),
+    ('form-data', {}, (None, ReceivedField)),
+    ('form-data', {'name': 'filesize'}, ('filesize', DescriptionField)),
 ])
 def test_choose_input(disposition, options, expected):
-    input_name, input_class = _choose_input(disposition, options)
+    with patch('upload.receiver.open'):
+        input_name, input_obj = _choose_input(disposition, options)
+
     expected_name, expected_class = expected
+
     assert input_name == expected_name
-    assert expected_class is input_class
+    assert isinstance(input_obj, expected_class)
 
 
 def test_received_file_name_conflict():

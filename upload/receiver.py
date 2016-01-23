@@ -147,8 +147,13 @@ def _choose_input(disposition, options):
         'upload': ReceivedFile,
         'filesize': DescriptionField
     }.get(input_name)
-    if field_class is None and 'filename' in options:
-        field_class = ReceivedFile
+
+    if field_class is None:
+        if 'filename' in options:
+            field_class = ReceivedFile
+        else:
+            field_class = ReceivedField
+
     return (input_name, field_class(**options))
 
 
