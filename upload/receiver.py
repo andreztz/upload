@@ -9,6 +9,14 @@ from upload.util import parse_header_options
 
 
 class ReceivedPart(object):
+    """Store incoming field data
+
+    FormDataReceiver will pass data for one field to ReceivedPart implementors.
+
+    Examine header options passed as kwargs to __init__, choose where to store
+    the incoming data, and write it when received a part in the data_received
+    method.
+    """
     def __init__(self):
         self._sink = self.get_sink()
 
@@ -16,6 +24,8 @@ class ReceivedPart(object):
         raise NotImplementedError()
 
     def data_received(self, data):
+        """
+        """
         self._sink.write(data)
 
     def finish(self):
@@ -23,12 +33,19 @@ class ReceivedPart(object):
 
 
 class ReceivedFile(ReceivedPart):
+    """A ReceivedPart that stores incoming data in a disk file
+
+    Args:
+        filename (str): the name to save the file as.
+            If it already exists, a uuid4 will be added to the name.
+    """
     def __init__(self, filename):
         self._filename = filename
         self._original_filename = filename
         super(ReceivedFile, self).__init__()
 
     def get_sink(self):
+        # XXX maybe parametrize if you should be able to overwrite files?
         while True:
             try:
                 return open(self._filename, 'wx')
@@ -51,6 +68,10 @@ class ReceivedField(ReceivedPart):
 
 
 class DescriptionField(ReceivedField):
+    """A ReceivedPart to store json data
+
+    Used for the filesize description field sent from the js uploader app
+    """
     def get_data(self):
         return json.loads(self._sink.getvalue())
 
