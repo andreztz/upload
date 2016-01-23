@@ -1,3 +1,14 @@
+# coding: utf-8
+"""
+This module has the infrastructure for actually receiving and storing incoming
+form data.
+
+Pass your incoming multipart/form-data into a FormDataReceiver, which will then
+delegate to HeadersGatherer to examine the multipart headers, and to ReceivedPart
+subclasses for storing the data.
+"""
+
+
 from collections import Mapping
 import json
 import uuid
