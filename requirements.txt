@@ -6,4 +6,3 @@ certifi==2015.11.20.1
 singledispatch==3.4.0.3
 six==1.10.0
 tornado==4.3
-wsgiref==0.1.2
